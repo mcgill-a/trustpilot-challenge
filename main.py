@@ -210,11 +210,6 @@ def get_direction(maze, pos1, pos2):
     return None
 
 
-def get_results(maze):
-    status = maze['game-state']
-    print(status)
-
-
 def solve(maze):
     get_available_moves(maze)
     path = search(maze, get_position(maze, 'pony'), get_position(maze, 'end-point'))
@@ -222,11 +217,12 @@ def solve(maze):
     directions = []
     for i in range(len(path) - 1):
         directions.append(get_direction(maze, path[i], path[i+1]))
-    response = ""
+    
+    response = dict({'state': 'active'})
     for direction in tqdm(directions):
-        response = move(maze['maze_id'], direction)
         if response['state'] != "active":
             break
+        response = move(maze['maze_id'], direction)
     print(response['state-result'])
 
 def main():
