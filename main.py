@@ -17,7 +17,7 @@ class Node():
         self.h = 0
 
 
-players = [
+PLAYERS = [
     "Twilight Sparkle",
     "Pinkie Pie",
     "Fluttershy",
@@ -28,62 +28,74 @@ players = [
     "Spike"
 ]
 
-parameters = {
+PARAMS = {
   "maze-width": 15,
   "maze-height": 15,
-  "maze-player-name": random.choice(players),
-  "difficulty": 5
+  "maze-player-name": random.choice(PLAYERS),
+  "difficulty": 10
 }
 
-headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
-api_base_url = "https://ponychallenge.trustpilot.com/pony-challenge/maze"
+HTTP_HEADERS = {'Content-type': 'application/json', 'Accept': 'application/json'}
+API_BASE_URL = "https://ponychallenge.trustpilot.com/pony-challenge/maze"
 
 # TODO:
-# - add try catch exceptions
-# - implement enemy avoidance logic
-# - switch x_dim and y_dim to grab from parameters rather than maze
-
+# - implement enemy avoidance logic:
+#   -- if next to monster, find longest path and run until not next to it
+# - add command line parameters
 
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')
 
 
 def create_maze():
-    parameters_json = json.dumps(parameters)
-    response = requests.post(api_base_url, data=parameters_json, headers=headers)
-    print(response.status_code, response.reason)
+    """Create a maze using the Pony API and return the maze id"""
+    try:
+        response = requests.post(API_BASE_URL, data=json.dumps(PARAMS), headers=HTTP_HEADERS)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        raise SystemExit(err)
     data = json.loads(response.content.decode("utf-8"))
     return data['maze_id']
 
 
 def get_maze(maze_id):
-    url = api_base_url + "/" + maze_id
-    response = requests.get(url, headers=headers)
-    print(response.status_code, response.reason)
+    """Get the current state of the maze using the Pony API"""
+    try:
+        url = API_BASE_URL + "/" + maze_id
+        response = requests.get(url, headers=HTTP_HEADERS)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        raise SystemExit(err)
     data = json.loads(response.content.decode("utf-8"))
     return data
 
 
 def print_maze(maze_id):
-    url = api_base_url + "/" + maze_id + "/print"
-    response = requests.get(url, headers=headers)
-    #print(response.status_code, response.reason)
+    """Print the current visual representation of the maze using the Pony API"""
+    try:
+        url = API_BASE_URL + "/" + maze_id + "/print"
+        response = requests.get(url, headers=HTTP_HEADERS)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        raise SystemExit(err)
     data = response.content.decode("utf-8")
     print(data)
 
 
 def move(maze_id, direction):
-    data = {'direction': direction}
-    data_json = json.dumps(data)
-    url = api_base_url + "/" + maze_id
-    response = requests.post(url, data=data_json, headers=headers)
-    #print(response.status_code, response.reason)
+    """Move the player character in the maze using the Pony API"""
+    try:
+        url = API_BASE_URL + "/" + maze_id
+        response = requests.post(url, data=json.dumps({'direction': direction}), headers=HTTP_HEADERS)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        raise SystemExit(err)
     data = json.loads(response.content.decode("utf-8"))
-    
     return data
 
 
 def backtrack(node):
+    """Iterate back through each path node to return a list of move positions"""
     steps = []
     while node is not None:
         steps.append(node.position)
@@ -92,6 +104,7 @@ def backtrack(node):
 
 
 def search(maze, start, end):
+    """Search for the shortest path using the A* path finding algorithm"""
     start_node = Node(None, start)
     end_node = Node(None, end)
     
@@ -132,7 +145,8 @@ def search(maze, start, end):
 
 
 def get_new_position(maze, position, direction):
-    y_dim = int(maze['size'][1])
+    """Get the updated position of the player based moving in the a given direction"""
+    y_dim = PARAMS['maze-height']
     
     if direction == "north":
         return position - y_dim
@@ -146,7 +160,8 @@ def get_new_position(maze, position, direction):
 
 
 def get_distance_to_exit(maze, current_position, exit_position):
-    x_dim, y_dim = int(maze['size'][0]), int(maze['size'][1])
+    """Get the euclidean distance between the player and the maze exit"""
+    x_dim, y_dim = PARAMS['maze-width'], PARAMS['maze-height']
 
     current_x = current_position % x_dim
     current_y = math.floor(current_position / y_dim)
@@ -159,6 +174,7 @@ def get_distance_to_exit(maze, current_position, exit_position):
 
 
 def get_position(maze, element):
+    """Get the position of an element in the maze (pony, demokun, or end-point)"""
     if element == 'pony':
         return int(maze['pony'][0])
     elif element == 'demokun':
@@ -169,35 +185,37 @@ def get_position(maze, element):
 
 
 def get_available_moves(maze, position=None):
+    """Get the directions that a player can move given a specific position"""
     if not position:
         position = get_position(maze, 'pony')
     
-    available_moves = {}
+    available_moves = []
     
     on_south_edge, on_east_edge = False, False
-    x_dim, y_dim = int(maze['size'][0]), int(maze['size'][1])
+    x_dim, y_dim = PARAMS['maze-width'], PARAMS['maze-height']
     size = x_dim * y_dim
     if "north" not in maze['data'][position]:
-        available_moves['north'] = True
+        available_moves.append('north')
     if "west" not in maze['data'][position]:
-        available_moves['west'] = True
+        available_moves.append('west')
 
     # Check if the player is at the south edge of the maze
     if (position > size - y_dim - 1):
         on_south_edge = True
     # Check if there is a north wall to the south of the player
     if not on_south_edge and "north" not in maze['data'][position+x_dim]:
-        available_moves['south'] = True
+        available_moves.append('south')
     
     # Check if there is a west wall to the east of the player
     # (if the player is on the east of the maze, there will still be a west wall at position + 1)
     if position + 1 < size and "west" not in maze['data'][position+1]:
-        available_moves['east'] = True
+        available_moves.append('east')
     
     return available_moves
 
 def get_direction(maze, pos1, pos2):
-    x_dim = int(maze['size'][0])
+    """Get the direction travelled moving from one position to another"""
+    x_dim = PARAMS['maze-width']
 
     if pos2 - pos1 == x_dim:
         return "south"
@@ -211,23 +229,25 @@ def get_direction(maze, pos1, pos2):
 
 
 def solve(maze):
-    get_available_moves(maze)
+    """Run the A* search to find the shortest path and then send each move to the Pony API"""
     path = search(maze, get_position(maze, 'pony'), get_position(maze, 'end-point'))
     
     directions = []
     for i in range(len(path) - 1):
         directions.append(get_direction(maze, path[i], path[i+1]))
     
-    response = dict({'state': 'active'})
+    response = dict({'state': 'active'}) # default state
     for direction in tqdm(directions):
         if response['state'] != "active":
             break
         response = move(maze['maze_id'], direction)
     print(response['state-result'])
+    if response['hidden-url']:
+        print("https://ponychallenge.trustpilot.com" + response['hidden-url'])
 
 def main():
     maze_id = create_maze()
-    print(maze_id)
+    print("Maze ID: " + maze_id)
     maze = get_maze(maze_id)
     print_maze(maze_id)
     solve(maze)
