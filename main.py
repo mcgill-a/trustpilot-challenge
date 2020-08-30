@@ -117,8 +117,8 @@ def backtrack(node):
     return steps[::-1]
 
 
-def search(maze, start, end):
-    """Search for the shortest path using the A* path finding algorithm"""
+def search_exit(maze, start, end):
+    """Search for the shortest path to the exit using the A* search algorithm"""
     start_node = Node(None, start)
     end_node = Node(None, end)
 
@@ -138,7 +138,7 @@ def search(maze, start, end):
         moves = get_available_moves(maze, position=current_node.position)
         for move in moves:
             node_position = get_new_position(maze, current_node.position, move)
-            if node_position not in explored:
+            if node_position and node_position not in explored:
                 explored.append(node_position)
                 new_node = Node(current_node, node_position)
                 children.append(new_node)
@@ -163,15 +163,21 @@ def get_new_position(maze, position, direction):
     """Get the updated position of the player based moving in the a given direction"""
     y_dim = PARAMS['maze-height']
 
+    output = None
+
     if direction == "north":
-        return position - y_dim
+        output = position - y_dim
     elif direction == "east":
-        return position + 1
+        output = position + 1
     elif direction == "south":
-        return position + y_dim
+        output = position + y_dim
     elif direction == "west":
-        return position - 1
-    return None
+        output = position - 1
+    
+    # Catch failed available_moves edge cases
+    if output < 0:
+        output = None
+    return output
 
 
 def get_distance_to_exit(maze, current_position, exit_position):
@@ -189,24 +195,45 @@ def get_distance_to_exit(maze, current_position, exit_position):
 
 
 def get_position(maze, element):
-    """Get the position of an element in the maze (pony, demokun, or end-point)"""
+    """Get the position of an element in the maze (pony, domokun, or end-point)"""
     if element == 'pony':
         return int(maze['pony'][0])
-    elif element == 'demokun':
-        return int(maze['demokun'][0])
+    elif element == 'domokun':
+        return int(maze['domokun'][0])
     elif element == 'end-point':
         return int(maze['end-point'][0])
     return None
 
 
-def get_available_moves(maze, position=None):
+def domokun_near_player(maze):
+    """Get the direction of the domokun if it is within 1 position of the player"""
+    x_dim, y_dim = PARAMS['maze-width'], PARAMS['maze-height']
+    pos_domokun = get_position(maze, 'domokun')
+    pos_player = get_position(maze, 'pony')
+    difference = pos_domokun - pos_player
+    row_domokun = math.floor(pos_domokun / x_dim)
+    row_player = math.floor(pos_player / x_dim)
+
+    if (difference == -x_dim):
+        return "north"
+    elif (difference == x_dim):
+        return "south"
+    elif (row_domokun == row_player): 
+        if (difference == 1): 
+            return "east"
+        elif (difference == -1):
+            return "west"
+    return None
+
+
+def get_available_moves(maze, position=None, avoid_domokun=False):
     """Get the directions that a player can move given a specific position"""
     if not position:
         position = get_position(maze, 'pony')
 
     available_moves = []
 
-    on_south_edge, on_east_edge = False, False
+    on_south_edge = False
     x_dim, y_dim = PARAMS['maze-width'], PARAMS['maze-height']
     size = x_dim * y_dim
     if "north" not in maze['data'][position]:
@@ -225,6 +252,11 @@ def get_available_moves(maze, position=None):
     # (if the player is on the east of the maze, there will still be a west wall at position + 1)
     if position + 1 < size and "west" not in maze['data'][position+1]:
         available_moves.append('east')
+
+    if avoid_domokun:
+        domokun_nearby = domokun_near_player(maze)
+        if domokun_nearby and domokun_nearby in available_moves:
+            available_moves.remove(domokun_nearby)
 
     return available_moves
 
@@ -246,7 +278,7 @@ def get_direction(maze, pos1, pos2):
 
 def solve(maze):
     """Run the A* search to find the shortest path and then send each move to the Pony API"""
-    path = search(maze, get_position(maze, 'pony'),
+    path = search_exit(maze, get_position(maze, 'pony'),
                   get_position(maze, 'end-point'))
 
     directions = []
@@ -293,13 +325,11 @@ def get_arguments():
 
 def main():
     get_arguments()
-
     maze_id = create_maze()
     print("Maze ID: " + maze_id)
     maze = get_maze(maze_id)
     print_maze(maze_id)
     solve(maze)
-
 
 if __name__ == "__main__":
     main()
