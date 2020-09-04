@@ -116,8 +116,50 @@ def backtrack(node):
     return steps[::-1]
 
 
-def search_exit(maze, start, end):
+def search(maze, start, end):
     """Search for the shortest path to the exit using the A* search algorithm"""
+    start_node = Node(None, start)
+    end_node = Node(None, end)
+
+    open_list, closed_list = set(), set()
+    open_list.add(start_node)
+    explored = [start_node.position]
+
+    while len(open_list):
+        current_node = min(open_list, key=lambda o: o.g + o.h)
+        if current_node.position == end_node.position:
+            return backtrack(current_node)
+
+        open_list.remove(current_node)
+        closed_list.add(current_node)
+
+        children = []
+        moves = get_available_moves(maze, position=current_node.position)
+        for move in moves:
+            node_position = get_new_position(maze, current_node.position, move)
+            if node_position and node_position not in explored:
+                explored.append(node_position)
+                new_node = Node(current_node, node_position)
+                children.append(new_node)
+
+        for node in children:
+            if node in closed_list:
+                continue
+            if node in open_list:
+                new_g = current_node.g + 1
+                if node.g > new_g:
+                    node.g = new_g
+                    node.parent = current_node
+            else:
+                node.g = current_node.g + 1
+                node.h = get_distance_to_exit(
+                    maze, current_node.position, end_node.position)
+                node.parent = current_node
+                open_list.add(node)
+
+
+def search_domokun_path(maze, start, end):
+    """Search for the shortest path to the domokun using the A* search algorithm"""
     start_node = Node(None, start)
     end_node = Node(None, end)
 
@@ -226,7 +268,7 @@ def domokun_near_player(maze):
     return None
 
 
-def get_available_moves(maze, position=None, avoid_domokun=False):
+def get_available_moves(maze, position=None):
     """Get the directions that a player can move given a specific position"""
     if not position:
         position = get_position(maze, 'pony')
@@ -252,12 +294,6 @@ def get_available_moves(maze, position=None, avoid_domokun=False):
     # (if the player is on the east of the maze, there will still be a west wall at position + 1)
     if position + 1 < size and "west" not in maze['data'][position+1]:
         available_moves.append('east')
-
-    if avoid_domokun:
-        domokun_nearby = domokun_near_player(maze)
-        if domokun_nearby and domokun_nearby in available_moves:
-            available_moves.remove(domokun_nearby)
-
     return available_moves
 
 
@@ -276,16 +312,23 @@ def get_direction(maze, pos1, pos2):
     return None
 
 
-def get_directions(maze):
-    path = search_exit(maze, get_position(maze, 'pony'),
-                       get_position(maze, 'end-point'))
+def get_directions(maze, a, b):
+    """Get the directions between point a and point b"""
+    path = search(maze, get_position(maze, a),
+                       get_position(maze, b))
 
     directions = []
-    for i in range(len(path) - 1):
-        directions.append(get_direction(maze, path[i], path[i+1]))
+    if path and len(path) > 1:
+        for i in range(len(path) - 1):
+            directions.append(get_direction(maze, path[i], path[i+1]))
     return directions
 
-
+def get_random_safe_move(maze, pos_player, domokun_path,):
+    moves = get_available_moves(maze, pos_player)
+    if len(moves) > 1:
+        if domokun_path[0] in moves:
+            moves.remove(domokun_path[0])
+    return random.choice(moves)
 
 
 def solve(maze):
@@ -294,15 +337,16 @@ def solve(maze):
     response = dict({'state': 'active'})  # default state
     while(response['state'] == 'active'):
         reset_path = False
-        directions = get_directions(maze)
+        directions = get_directions(maze, 'pony', 'end-point')
         for direction in tqdm(directions):
             if response['state'] != 'active':
                 break
 
             # if there is a domokun blocking the direction of the path
-            if domokun_near_player(maze) == direction:
+            domokun_path = get_directions(maze, 'pony', 'domokun')
+            if len(domokun_path) <= 2:
                 pos_player = get_position(maze, 'pony')
-                new_direction = get_random_safe_move(maze, pos_player)
+                new_direction = get_random_safe_move(maze, pos_player, domokun_path)
                 if new_direction:
                     direction = new_direction
                     reset_path = True
@@ -329,14 +373,6 @@ def valid_player_name(arg):
     return arg
 
 
-def get_random_safe_move(maze, current_position):
-    moves = get_available_moves(
-        maze, position=current_position, avoid_domokun=True)
-    if moves:
-        return random.choice(moves)
-    return None
-
-
 def get_arguments():
     parser = argparse.ArgumentParser(
         description='Trustpilot Challenge - Save the Pony!')
@@ -359,7 +395,6 @@ def get_arguments():
 def main():
     get_arguments()
     maze_id = create_maze()
-    #maze_id = "af9abb5f-6d32-40ff-8148-c451f60a35b8"
     print("Maze ID: " + maze_id)
     maze = get_maze(maze_id)
     print_maze(maze_id)
