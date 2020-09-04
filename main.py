@@ -7,9 +7,8 @@ import argparse
 from tqdm import tqdm
 
 # TODO:
-# - implement enemy avoidance logic:
-#   -- if next to monster, find longest path and run until not next to it
 # - let the user control the player
+# - improve enemy nearby detection (use path moves rather than physical location)
 
 
 class Node():
@@ -173,7 +172,7 @@ def get_new_position(maze, position, direction):
         output = position + y_dim
     elif direction == "west":
         output = position - 1
-    
+
     # Catch failed available_moves edge cases
     if output < 0:
         output = None
@@ -213,15 +212,16 @@ def domokun_near_player(maze):
     difference = pos_domokun - pos_player
     row_domokun = math.floor(pos_domokun / x_dim)
     row_player = math.floor(pos_player / x_dim)
-
-    if (difference == -x_dim):
+    # should check if the domokun can reach the player within two moves,
+    # not if their physical maze position is within two spaces.
+    if (difference == -x_dim or difference == -x_dim*2):
         return "north"
-    elif (difference == x_dim):
+    elif (difference == x_dim or difference == x_dim*2):
         return "south"
-    elif (row_domokun == row_player): 
-        if (difference == 1): 
+    elif (row_domokun == row_player):
+        if (difference == 1 or difference == 2):
             return "east"
-        elif (difference == -1):
+        elif (difference == -1 or difference == -2):
             return "west"
     return None
 
@@ -276,20 +276,45 @@ def get_direction(maze, pos1, pos2):
     return None
 
 
-def solve(maze):
-    """Run the A* search to find the shortest path and then send each move to the Pony API"""
+def get_directions(maze):
     path = search_exit(maze, get_position(maze, 'pony'),
-                  get_position(maze, 'end-point'))
+                       get_position(maze, 'end-point'))
 
     directions = []
     for i in range(len(path) - 1):
         directions.append(get_direction(maze, path[i], path[i+1]))
+    return directions
+
+
+
+
+def solve(maze):
+    """Run the A* search to find the shortest path and then send each move to the Pony API"""
 
     response = dict({'state': 'active'})  # default state
-    for direction in tqdm(directions):
-        if response['state'] != 'active':
-            break
-        response = move(maze['maze_id'], direction)
+    while(response['state'] == 'active'):
+        reset_path = False
+        directions = get_directions(maze)
+        for direction in tqdm(directions):
+            if response['state'] != 'active':
+                break
+
+            # if there is a domokun blocking the direction of the path
+            if domokun_near_player(maze) == direction:
+                pos_player = get_position(maze, 'pony')
+                new_direction = get_random_safe_move(maze, pos_player)
+                if new_direction:
+                    direction = new_direction
+                    reset_path = True
+                else:
+                    # no available moves - accept your fate
+                    reset_path = False
+            response = move(maze['maze_id'], direction)
+            maze = get_maze(maze['maze_id'])
+            print_maze(maze['maze_id'])
+            if reset_path:
+                break
+
     print(response['state-result'])
     if response['hidden-url']:
         print('https://ponychallenge.trustpilot.com' + response['hidden-url'])
@@ -302,6 +327,14 @@ def valid_player_name(arg):
             raise argparse.ArgumentTypeError(
                 "Player name must be a valid pony name")
     return arg
+
+
+def get_random_safe_move(maze, current_position):
+    moves = get_available_moves(
+        maze, position=current_position, avoid_domokun=True)
+    if moves:
+        return random.choice(moves)
+    return None
 
 
 def get_arguments():
@@ -326,10 +359,12 @@ def get_arguments():
 def main():
     get_arguments()
     maze_id = create_maze()
+    #maze_id = "af9abb5f-6d32-40ff-8148-c451f60a35b8"
     print("Maze ID: " + maze_id)
     maze = get_maze(maze_id)
     print_maze(maze_id)
     solve(maze)
+
 
 if __name__ == "__main__":
     main()
