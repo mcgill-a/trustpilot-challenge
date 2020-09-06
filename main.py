@@ -117,49 +117,7 @@ def backtrack(node):
 
 
 def search(maze, start, end):
-    """Search for the shortest path to the exit using the A* search algorithm"""
-    start_node = Node(None, start)
-    end_node = Node(None, end)
-
-    open_list, closed_list = set(), set()
-    open_list.add(start_node)
-    explored = [start_node.position]
-
-    while len(open_list):
-        current_node = min(open_list, key=lambda o: o.g + o.h)
-        if current_node.position == end_node.position:
-            return backtrack(current_node)
-
-        open_list.remove(current_node)
-        closed_list.add(current_node)
-
-        children = []
-        moves = get_available_moves(maze, position=current_node.position)
-        for move in moves:
-            node_position = get_new_position(maze, current_node.position, move)
-            if node_position and node_position not in explored:
-                explored.append(node_position)
-                new_node = Node(current_node, node_position)
-                children.append(new_node)
-
-        for node in children:
-            if node in closed_list:
-                continue
-            if node in open_list:
-                new_g = current_node.g + 1
-                if node.g > new_g:
-                    node.g = new_g
-                    node.parent = current_node
-            else:
-                node.g = current_node.g + 1
-                node.h = get_distance_to_exit(
-                    maze, current_node.position, end_node.position)
-                node.parent = current_node
-                open_list.add(node)
-
-
-def search_domokun_path(maze, start, end):
-    """Search for the shortest path to the domokun using the A* search algorithm"""
+    """Search for the shortest path betwen two points using the A* search algorithm"""
     start_node = Node(None, start)
     end_node = Node(None, end)
 
@@ -215,8 +173,8 @@ def get_new_position(maze, position, direction):
     elif direction == "west":
         output = position - 1
 
-    # Catch failed available_moves edge cases
-    if output < 0:
+    # Fallback for out of bounds edge cases
+    if output < 0 or output > (PARAMS['maze-width'] * PARAMS['maze-height']) - 1:
         output = None
     return output
 
@@ -243,28 +201,6 @@ def get_position(maze, element):
         return int(maze['domokun'][0])
     elif element == 'end-point':
         return int(maze['end-point'][0])
-    return None
-
-
-def domokun_near_player(maze):
-    """Get the direction of the domokun if it is within 1 position of the player"""
-    x_dim, y_dim = PARAMS['maze-width'], PARAMS['maze-height']
-    pos_domokun = get_position(maze, 'domokun')
-    pos_player = get_position(maze, 'pony')
-    difference = pos_domokun - pos_player
-    row_domokun = math.floor(pos_domokun / x_dim)
-    row_player = math.floor(pos_player / x_dim)
-    # should check if the domokun can reach the player within two moves,
-    # not if their physical maze position is within two spaces.
-    if (difference == -x_dim or difference == -x_dim*2):
-        return "north"
-    elif (difference == x_dim or difference == x_dim*2):
-        return "south"
-    elif (row_domokun == row_player):
-        if (difference == 1 or difference == 2):
-            return "east"
-        elif (difference == -1 or difference == -2):
-            return "west"
     return None
 
 
@@ -352,7 +288,7 @@ def solve(maze):
                     direction = new_direction
                     reset_path = True
                 else:
-                    # no available moves - accept your fate
+                    # no additional moves to avoid the domokun - accept your fate
                     reset_path = False
             response = move(maze['maze_id'], direction)
             maze = get_maze(maze['maze_id'])
