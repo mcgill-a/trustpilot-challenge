@@ -7,9 +7,7 @@ import argparse
 from tqdm import tqdm
 
 # TODO:
-# - let the user control the player
-# - improve enemy nearby detection (use path moves rather than physical location)
-
+# - create a readme
 
 class Node():
 
@@ -45,7 +43,8 @@ SETTINGS = {
     "min-height": 15,
     "max-height": 25,
     "min-difficulty": 0,
-    "max-difficulty": 10
+    "max-difficulty": 10,
+    "display": True
 }
 
 HTTP_HEADERS = {'Content-type': 'application/json',
@@ -53,7 +52,7 @@ HTTP_HEADERS = {'Content-type': 'application/json',
 API_BASE_URL = "https://ponychallenge.trustpilot.com/pony-challenge/maze"
 
 
-def cls():
+def clear_console():
     """Clear the Python console"""
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -91,6 +90,7 @@ def print_maze(maze_id):
     except requests.exceptions.HTTPError as err:
         raise SystemExit(err)
     data = response.content.decode("utf-8")
+    clear_console()
     print(data)
 
 
@@ -315,13 +315,14 @@ def get_direction(maze, pos1, pos2):
 def get_directions(maze, a, b):
     """Get the directions between point a and point b"""
     path = search(maze, get_position(maze, a),
-                       get_position(maze, b))
+                  get_position(maze, b))
 
     directions = []
     if path and len(path) > 1:
         for i in range(len(path) - 1):
             directions.append(get_direction(maze, path[i], path[i+1]))
     return directions
+
 
 def get_random_safe_move(maze, pos_player, domokun_path,):
     moves = get_available_moves(maze, pos_player)
@@ -333,20 +334,20 @@ def get_random_safe_move(maze, pos_player, domokun_path,):
 
 def solve(maze):
     """Run the A* search to find the shortest path and then send each move to the Pony API"""
-
     response = dict({'state': 'active'})  # default state
     while(response['state'] == 'active'):
         reset_path = False
         directions = get_directions(maze, 'pony', 'end-point')
-        for direction in tqdm(directions):
+        for direction in directions:
             if response['state'] != 'active':
                 break
 
-            # if there is a domokun blocking the direction of the path
+            # if there is a domokun blocking the exit path direction
             domokun_path = get_directions(maze, 'pony', 'domokun')
-            if len(domokun_path) <= 2:
+            if len(domokun_path) <= 2 and domokun_path[0] == direction:
                 pos_player = get_position(maze, 'pony')
-                new_direction = get_random_safe_move(maze, pos_player, domokun_path)
+                new_direction = get_random_safe_move(
+                    maze, pos_player, domokun_path)
                 if new_direction:
                     direction = new_direction
                     reset_path = True
@@ -355,13 +356,15 @@ def solve(maze):
                     reset_path = False
             response = move(maze['maze_id'], direction)
             maze = get_maze(maze['maze_id'])
-            print_maze(maze['maze_id'])
+            if SETTINGS['display']:
+                print_maze(maze['maze_id'])
             if reset_path:
+                print("=============================================================")
+                print(PARAMS['maze-player-name'] + " is running away from the domokun")
+                print("=============================================================")
                 break
 
-    print(response['state-result'])
-    if response['hidden-url']:
-        print('https://ponychallenge.trustpilot.com' + response['hidden-url'])
+    display_info(maze, response)
 
 
 def valid_player_name(arg):
@@ -373,7 +376,19 @@ def valid_player_name(arg):
     return arg
 
 
+def display_info(maze, response):
+    if SETTINGS['display']:
+        print_maze(maze['maze_id'])
+    print("=============================================================")
+    print(response['state-result'])
+    if response['hidden-url']:
+        print('https://ponychallenge.trustpilot.com' + response['hidden-url'])
+    print("Maze ID: " + maze['maze_id'])
+    print("=============================================================")
+
+
 def get_arguments():
+    """Get the command line arguments to setup the maze parameters"""
     parser = argparse.ArgumentParser(
         description='Trustpilot Challenge - Save the Pony!')
     parser.add_argument('-width', default=15, type=int, choices=range(
@@ -382,6 +397,8 @@ def get_arguments():
         SETTINGS['min-height'], SETTINGS['max-height']+1))
     parser.add_argument('-difficulty', default=1, type=int, choices=range(
         SETTINGS['min-difficulty'], SETTINGS['max-difficulty']+1))
+    parser.add_argument('-display', default=True,
+                        type=bool, choices=[True, False])
     parser.add_argument('-player', default=random.choice(PLAYERS),
                         type=str.title, choices=PLAYERS)
 
@@ -390,12 +407,12 @@ def get_arguments():
     PARAMS['maze-height'] = args.height
     PARAMS['difficulty'] = args.difficulty
     PARAMS['maze-player-name'] = args.player
+    SETTINGS['display'] = args.display
 
 
 def main():
     get_arguments()
     maze_id = create_maze()
-    print("Maze ID: " + maze_id)
     maze = get_maze(maze_id)
     print_maze(maze_id)
     solve(maze)
