@@ -4,20 +4,16 @@ import random
 import math
 import os
 import argparse
-from tqdm import tqdm
-
-# TODO:
-# - create a readme
 
 class Node():
-
+    """A* Pathfinding Node"""
     def __init__(self, parent=None, position=None):
         self.parent = parent
         self.position = position
 
-        self.f = 0
-        self.g = 0
-        self.h = 0
+        self.f = 0 # estimated total cost path through node to goal
+        self.g = 0 # cost so far to reach node
+        self.h = 0 # estimated cost from node to goal
 
 
 PARAMS = {
@@ -29,12 +25,11 @@ PARAMS = {
 
 PLAYERS = [
     "Twilight Sparkle",
-    "Applejack",
     "Fluttershy",
+    "Applejack",
+    "Rainbow Dash",
     "Rarity",
     "Pinkie Pie",
-    "Rainbow Dash",
-    "Spike"
 ]
 
 SETTINGS = {
